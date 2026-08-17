@@ -1,7 +1,7 @@
 export type TaskStatus = { task_id: string; state: number; progress?: number; videos?: string[] | null; combined_videos?: string[] | null; error?: string | null }
 export type ApiEnvelope<T> = { status: number; message?: string; data: T }
 
-const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080').replace(/\/$/, '')
+const base = (process.env.NEXT_PUBLIC_MONEYPRINTER_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080').replace(/\/$/, '')
 const endpoint = `${base}/api/v1`
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
