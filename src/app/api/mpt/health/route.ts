@@ -11,7 +11,8 @@ export async function GET() {
   try {
     const response = await fetch(`${backendUrl.replace(/\/+$/, '')}/ping`, { signal: controller.signal, cache: 'no-store' })
     clearTimeout(timer)
-    return NextResponse.json({ connected: response.ok, status: response.ok ? 'online' : 'error', message: response.ok ? 'MoneyPrinterTurbo backend connected.' : `Backend returned ${response.status}.` })
+    const body = await response.text().catch(() => '')
+    return NextResponse.json({ connected: response.ok, status: response.ok ? 'online' : 'error', message: response.ok ? 'MoneyPrinterTurbo backend connected.' : `Backend returned ${response.status}.`, details: body.slice(0, 300) })
   } catch {
     clearTimeout(timer)
     return NextResponse.json({ connected: false, status: 'offline', message: 'MoneyPrinterTurbo backend is offline or unreachable.' })
