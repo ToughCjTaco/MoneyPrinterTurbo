@@ -22,7 +22,12 @@ export function VideoStudio() {
   const [progress, setProgress] = useState(0)
   const [task, setTask] = useState<TaskStatus | null>(null)
   const [error, setError] = useState('')
+  const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/mpt/health').then(response => response.json()).then(result => setBackendConnected(result.connected === true)).catch(() => setBackendConnected(false))
+  }, [])
 
   useEffect(() => {
     if (!task?.task_id || !['queued', 'rendering'].includes(status)) return
@@ -35,10 +40,14 @@ export function VideoStudio() {
 
   const videoUrl = useMemo(() => { const file = task?.combined_videos?.[0] || task?.videos?.[0]; return file ? getMediaUrl(file) : '' }, [task])
   const generate = async () => {
-    if (!topic.trim() || !script.trim()) { setError('Add a topic and a script before generating.'); setStatus('error'); return }
+    if (!topic.trim() && !script.trim()) { setError('Enter a video topic or video script first.'); return }
     setError(''); setStatus('queued'); setProgress(8)
-    try { const response = await createVideo({ video_subject: topic, video_script: script, video_aspect: aspect, video_clip_duration: duration, voice_name: voice === voices[0] ? '' : voice, video_source: source.toLowerCase(), subtitle_enabled: subtitles, bgm_type: bgm ? 'random' : 'none', bgm_volume: 0.2 }); setTask({ task_id: response.data.task_id, state: 0, progress: 8 }) }
-    catch (cause) { setStatus('error'); setError(cause instanceof Error ? cause.message : 'Could not queue the video.') }
+    try {
+      const response = await createVideo({ video_subject: topic.trim(), video_script: script.trim(), video_aspect: aspect, video_clip_duration: duration, voice_name: voice === voices[0] ? '' : voice, video_source: source.toLowerCase(), subtitle_enabled: subtitles, bgm_type: bgm ? 'random' : 'none', bgm_volume: 0.2 })
+      const taskId = response.data?.data?.task_id
+      if (!taskId) throw new Error('MoneyPrinterTurbo returned an invalid generation response.')
+      setTask({ task_id: taskId, state: 0, progress: 8 })
+    } catch (cause) { setStatus('error'); setError(cause instanceof Error ? cause.message : 'The frontend could not contact the generation service. Please try again.') }
   }
   const writeScript = async () => { if (!topic.trim()) return; setError(''); setStatus('writing'); try { const response = await generateScript(topic); setScript(response.data.video_script); setStatus('idle') } catch (cause) { setStatus('error'); setError(cause instanceof Error ? cause.message : 'Script generation is unavailable.') } }
   const label = status === 'idle' ? 'Ready to create' : status === 'writing' ? 'Writing your script' : status === 'queued' ? 'Queued for rendering' : status === 'rendering' ? 'Rendering video' : status === 'complete' ? 'Video ready' : 'Something needs attention'
@@ -46,7 +55,7 @@ export function VideoStudio() {
   return <main className="min-h-screen px-4 py-5 md:px-8 lg:px-10">
     <header className="mx-auto flex max-w-[1480px] items-center justify-between border-b border-border/70 pb-5">
       <div className="flex items-center gap-3"><div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/10"><Clapperboard className="size-5" /></div><div><p className="text-sm font-semibold tracking-wide">MONEYPRINTER<span className="text-primary">TURBO</span></p><p className="font-mono text-[10px] uppercase tracking-[.22em] text-muted-foreground">Creator studio</p></div></div>
-      <div className="flex items-center gap-3"><span className="hidden rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground sm:inline-flex"><span className="mr-2 size-1.5 self-center rounded-full bg-emerald-400" />Backend connected</span><button onClick={() => setShowSettings(!showSettings)} className="rounded-lg border border-border bg-card p-2.5 text-muted-foreground transition hover:text-foreground" aria-label="Open settings"><Settings2 className="size-4" /></button><div className="flex size-9 items-center justify-center rounded-full bg-accent/20 text-xs font-semibold text-accent">MP</div></div>
+      <div className="flex items-center gap-3"><span className="hidden rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground sm:inline-flex"><span className={`mr-2 size-1.5 self-center rounded-full ${backendConnected ? 'bg-emerald-400' : 'bg-red-400'}`} />{backendConnected ? 'Backend Connected' : 'Backend Not Connected'}</span><button onClick={() => setShowSettings(!showSettings)} className="rounded-lg border border-border bg-card p-2.5 text-muted-foreground transition hover:text-foreground" aria-label="Open settings"><Settings2 className="size-4" /></button><div className="flex size-9 items-center justify-center rounded-full bg-accent/20 text-xs font-semibold text-accent">MP</div></div>
     </header>
     <div className="mx-auto grid max-w-[1480px] gap-6 py-7 lg:grid-cols-[minmax(0,1.3fr)_minmax(360px,.7fr)]">
       <section className="flex flex-col gap-6">
