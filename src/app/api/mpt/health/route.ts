@@ -9,10 +9,13 @@ export async function GET() {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 5000)
   try {
-    const response = await fetch(`${backendUrl.replace(/\/+$/, '')}/ping`, { signal: controller.signal, cache: 'no-store' })
+    const origin = backendUrl.replace(/\/+$/, '')
+    const response = await fetch(`${origin}/openapi.json?health_check=${Date.now()}`, { signal: controller.signal, cache: 'no-store', headers: { Accept: 'application/json' } })
     clearTimeout(timer)
     const body = await response.text().catch(() => '')
-    return NextResponse.json({ connected: response.ok, status: response.ok ? 'online' : 'error', message: response.ok ? 'MoneyPrinterTurbo backend connected.' : `Backend returned ${response.status}.`, details: body.slice(0, 300) })
+    const contentType = response.headers.get('content-type') || ''
+    const looksLikeApi = contentType.includes('application/json') && body.includes('openapi')
+    return NextResponse.json({ connected: response.ok && looksLikeApi, status: response.ok && looksLikeApi ? 'online' : 'error', message: response.ok && looksLikeApi ? 'MoneyPrinterTurbo backend connected.' : `Backend returned ${response.status} without a valid FastAPI OpenAPI document.`, details: body.slice(0, 300) })
   } catch {
     clearTimeout(timer)
     return NextResponse.json({ connected: false, status: 'offline', message: 'MoneyPrinterTurbo backend is offline or unreachable.' })

@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 30000)
   try {
-    const response = await fetch(`${backendUrl.replace(/\/+$/, '')}/videos`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload), signal: controller.signal, cache: 'no-store' })
+    const response = await fetch(`${backendUrl.replace(/\/+$/, '')}/api/v1/videos`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload), signal: controller.signal, cache: 'no-store' })
     clearTimeout(timeout)
     const contentType = response.headers.get('content-type') || ''
     let data: unknown = null
