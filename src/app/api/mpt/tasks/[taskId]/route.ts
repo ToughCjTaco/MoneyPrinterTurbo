@@ -8,7 +8,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   if (!backendUrl) return NextResponse.json({ success: false, message: 'MoneyPrinterTurbo backend is not configured.' }, { status: 503 })
   try {
     const { taskId } = await params
-    const response = await fetch(`${backendUrl.replace(/\/+$/, '')}/tasks/${encodeURIComponent(taskId)}`, { cache: 'no-store' })
+    const response = await fetch(`${backendUrl.replace(/\/+$/, '')}/api/v1/tasks/${encodeURIComponent(taskId)}`, { cache: 'no-store' })
     const data = await response.json().catch(() => null)
     return NextResponse.json(data, { status: response.status })
   } catch {
