@@ -5,6 +5,7 @@ import { AlertCircle, Check, ChevronDown, Clapperboard, Download, FileAudio, Fil
 import { createVideo, generateScript, getMediaUrl, getTask, type TaskStatus } from '@/lib/api'
 
 type Status = 'idle' | 'writing' | 'queued' | 'rendering' | 'complete' | 'error'
+type BackendState = 'checking' | 'online' | 'offline' | 'not_configured' | 'error'
 const voices = ['Default voice', 'en-US-AriaNeural-Female', 'en-US-GuyNeural-Male', 'zh-CN-XiaoxiaoNeural-Female']
 const sources = ['Pexels', 'Pixabay', 'Local library', 'Mixkit']
 const fieldClass = 'w-full rounded-xl border border-border bg-input px-3.5 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20'
@@ -23,11 +24,27 @@ export function VideoStudio() {
   const [task, setTask] = useState<TaskStatus | null>(null)
   const [error, setError] = useState('')
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
+  const [backendState, setBackendState] = useState<BackendState>('checking')
+  const [backendMessage, setBackendMessage] = useState('Checking MoneyPrinterTurbo backend…')
   const [showSettings, setShowSettings] = useState(false)
 
-  useEffect(() => {
-    fetch('/api/mpt/health').then(response => response.json()).then(result => setBackendConnected(result.connected === true)).catch(() => setBackendConnected(false))
-  }, [])
+  const checkBackend = async () => {
+    setBackendState('checking')
+    setBackendMessage('Checking MoneyPrinterTurbo backend…')
+    try {
+      const response = await fetch('/api/mpt/health', { cache: 'no-store' })
+      const result = await response.json()
+      setBackendConnected(result.connected === true)
+      setBackendState(result.status || (result.connected ? 'online' : 'offline'))
+      setBackendMessage(result.message || 'MoneyPrinterTurbo backend status updated.')
+    } catch {
+      setBackendConnected(false)
+      setBackendState('offline')
+      setBackendMessage('The frontend could not reach its backend health proxy.')
+    }
+  }
+
+  useEffect(() => { void checkBackend() }, [])
 
   useEffect(() => {
     if (!task?.task_id || !['queued', 'rendering'].includes(status)) return
@@ -41,6 +58,7 @@ export function VideoStudio() {
   const videoUrl = useMemo(() => { const file = task?.combined_videos?.[0] || task?.videos?.[0]; return file ? getMediaUrl(file) : '' }, [task])
   const generate = async () => {
     if (!topic.trim() && !script.trim()) { setError('Enter a video topic or video script first.'); return }
+    if (backendConnected !== true) { setError(backendState === 'not_configured' ? 'Connect the MoneyPrinterTurbo backend by setting MONEYPRINTER_API_URL in the deployment environment.' : 'MoneyPrinterTurbo is offline. Start the Python API and retry the connection before generating.'); setStatus('error'); return }
     setError(''); setStatus('queued'); setProgress(8)
     try {
       const response = await createVideo({ video_subject: topic.trim(), video_script: script.trim(), video_aspect: aspect, video_clip_duration: duration, voice_name: voice === voices[0] ? '' : voice, video_source: source.toLowerCase(), subtitle_enabled: subtitles, bgm_type: bgm ? 'random' : 'none', bgm_volume: 0.2 })
@@ -55,7 +73,7 @@ export function VideoStudio() {
   return <main className="min-h-screen px-4 py-5 md:px-8 lg:px-10">
     <header className="mx-auto flex max-w-[1480px] items-center justify-between border-b border-border/70 pb-5">
       <div className="flex items-center gap-3"><div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/10"><Clapperboard className="size-5" /></div><div><p className="text-sm font-semibold tracking-wide">MONEYPRINTER<span className="text-primary">TURBO</span></p><p className="font-mono text-[10px] uppercase tracking-[.22em] text-muted-foreground">Creator studio</p></div></div>
-      <div className="flex items-center gap-3"><span className="hidden rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground sm:inline-flex"><span className={`mr-2 size-1.5 self-center rounded-full ${backendConnected ? 'bg-emerald-400' : 'bg-red-400'}`} />{backendConnected ? 'Backend Connected' : 'Backend Not Connected'}</span><button onClick={() => setShowSettings(!showSettings)} className="rounded-lg border border-border bg-card p-2.5 text-muted-foreground transition hover:text-foreground" aria-label="Open settings"><Settings2 className="size-4" /></button><div className="flex size-9 items-center justify-center rounded-full bg-accent/20 text-xs font-semibold text-accent">MP</div></div>
+      <div className="flex items-center gap-3"><button type="button" onClick={() => void checkBackend()} disabled={backendState === 'checking'} title={backendMessage} className="hidden items-center rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition hover:border-primary/50 hover:text-foreground disabled:cursor-wait sm:inline-flex"><span className={`mr-2 size-1.5 self-center rounded-full ${backendState === 'online' ? 'bg-emerald-400' : backendState === 'checking' ? 'animate-pulse bg-amber-400' : 'bg-red-400'}`} />{backendState === 'checking' ? 'Checking backend' : backendState === 'online' ? 'Backend connected' : backendState === 'not_configured' ? 'Backend not configured' : 'Backend offline'}<span className="ml-2 text-[10px] text-muted-foreground">Retry</span></button><button onClick={() => setShowSettings(!showSettings)} className="rounded-lg border border-border bg-card p-2.5 text-muted-foreground transition hover:text-foreground" aria-label="Open settings"><Settings2 className="size-4" /></button><div className="flex size-9 items-center justify-center rounded-full bg-accent/20 text-xs font-semibold text-accent">MP</div></div>
     </header>
     <div className="mx-auto grid max-w-[1480px] gap-6 py-7 lg:grid-cols-[minmax(0,1.3fr)_minmax(360px,.7fr)]">
       <section className="flex flex-col gap-6">
@@ -73,6 +91,7 @@ export function VideoStudio() {
         </div><div className="mt-6 grid gap-3 border-t border-border pt-5 sm:grid-cols-2"><button onClick={() => setSubtitles(!subtitles)} className={`flex items-center justify-between rounded-xl border p-3 text-left transition ${subtitles ? 'border-primary/40 bg-primary/10' : 'border-border bg-input'}`}><span className="flex items-center gap-3"><span className={`flex size-7 items-center justify-center rounded-lg ${subtitles ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>{subtitles && <Check className="size-4" />}</span><span><span className="block text-sm">Subtitles</span><span className="block text-xs text-muted-foreground">Burn captions into video</span></span></span><ChevronDown className="size-4 text-muted-foreground" /></button><button onClick={() => setBgm(!bgm)} className={`flex items-center justify-between rounded-xl border p-3 text-left transition ${bgm ? 'border-primary/40 bg-primary/10' : 'border-border bg-input'}`}><span className="flex items-center gap-3"><span className={`flex size-7 items-center justify-center rounded-lg ${bgm ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>{bgm ? <Check className="size-4" /> : <Headphones className="size-4" />}</span><span><span className="block text-sm">Background music</span><span className="block text-xs text-muted-foreground">Add a subtle audio bed</span></span></span><ChevronDown className="size-4 text-muted-foreground" /></button></div></div>
         <div className="flex items-center gap-3"><button onClick={generate} disabled={status === 'queued' || status === 'rendering' || status === 'writing'} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/10 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60">{status === 'queued' || status === 'rendering' ? <Loader2 className="size-4 animate-spin" /> : <Film className="size-4" />} Generate video</button><button onClick={() => setShowSettings(!showSettings)} className="rounded-xl border border-border bg-card p-3.5 text-muted-foreground hover:text-foreground" aria-label="Provider configuration"><Settings2 className="size-4" /></button></div>
         {showSettings && <div className="rounded-xl border border-accent/30 bg-accent/10 p-4 text-xs leading-5 text-accent">Provider configuration is managed by the Python backend. Keep API keys in its server environment; this browser never receives or stores secrets.</div>}
+        {backendState !== 'online' && backendState !== 'checking' && <div className="flex items-start justify-between gap-4 rounded-xl border border-amber-400/20 bg-amber-400/10 p-4 text-xs leading-5 text-amber-100"><span>{backendMessage}</span><button type="button" onClick={() => void checkBackend()} className="shrink-0 font-semibold underline underline-offset-4">Retry</button></div>}
         {error && <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-400/20 bg-red-400/10 p-3 text-sm text-red-200"><AlertCircle className="mt-0.5 size-4 shrink-0" />{error}</div>}
       </section>
       <aside className="flex flex-col gap-5"><div className="glass overflow-hidden rounded-2xl border border-border"><div className="flex items-center justify-between border-b border-border px-5 py-4"><div><p className="text-sm font-medium">Preview</p><p className="mt-0.5 text-xs text-muted-foreground">{label}</p></div><span className={`rounded-full px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider ${status === 'complete' ? 'bg-emerald-400/10 text-emerald-300' : status === 'error' ? 'bg-red-400/10 text-red-300' : 'bg-muted text-muted-foreground'}`}>{status}</span></div><div className="flex min-h-[420px] items-center justify-center bg-black/20 p-5 md:min-h-[500px]">{videoUrl ? <video src={videoUrl} controls className="max-h-[500px] w-full rounded-xl" /> : <div className="flex max-w-xs flex-col items-center text-center"><div className="mb-5 flex size-16 items-center justify-center rounded-2xl border border-border bg-muted/60 text-muted-foreground"><Play className="ml-1 size-6" /></div><p className="text-sm font-medium">Your video will appear here</p><p className="mt-2 text-xs leading-5 text-muted-foreground">Configure your story and hit generate to see the first cut.</p></div>}</div>{(status === 'queued' || status === 'rendering') && <div className="border-t border-border px-5 py-4"><div className="mb-2 flex justify-between text-xs"><span className="text-muted-foreground">Rendering your story</span><span className="font-mono text-primary">{progress}%</span></div><div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all duration-700" style={{ width: `${Math.max(progress, 8)}%` }} /></div></div>}{videoUrl && <div className="flex gap-3 border-t border-border p-4"><a href={videoUrl} download className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground"><Download className="size-3.5" /> Download video</a><span className="flex items-center gap-1 rounded-lg border border-border px-3 text-xs text-muted-foreground"><FileAudio className="size-3.5" /> MP4</span></div>}</div><div className="rounded-2xl border border-border bg-card/50 p-5"><div className="mb-4 flex items-center gap-2"><Sparkles className="size-4 text-accent" /><h3 className="text-sm font-medium">Studio notes</h3></div><ul className="flex flex-col gap-3 text-xs leading-5 text-muted-foreground"><li className="flex gap-2"><span className="mt-2 size-1 shrink-0 rounded-full bg-primary" />Shorter scripts tend to create more dynamic pacing.</li><li className="flex gap-2"><span className="mt-2 size-1 shrink-0 rounded-full bg-primary" />Portrait format is optimized for Reels, Shorts, and TikTok.</li></ul></div></aside>
